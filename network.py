@@ -18,7 +18,7 @@ class GlobalAvgPool2d(nn.Module):
         super(GlobalAvgPool2d, self).__init__()
 
     def forward(self, x):
-        return torch.mean(x, dim=[2, 3], keepdim=True)
+        return torch.mean(x, dim=[2, 3])
 
 
 class Darknet19(nn.Module):
@@ -46,7 +46,7 @@ class Darknet19(nn.Module):
         feature = self.conv_layer5(x)
         x = self.maxpool(feature)
         x = self.conv_layer6(x)
-        head_output = self.head(x).flatten(1)
+        head_output = self.head(x)
         return head_output
     
 if __name__=='__main__':

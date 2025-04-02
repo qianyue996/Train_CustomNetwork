@@ -13,12 +13,14 @@ class Trainer():
     def __init__(self):
         super().__init__()
         self.device='cuda' if torch.cuda.is_available() else 'cpu'
-        self.lr=3e-5
+        self.lr=5e-4
         self.batch_size=2
         self.start_epoch=0
         self.epochs=300
 
         self.losses=[]
+        self.loss_count=0
+        self.accuracy_count=0
         self.checkpoint=None
 
     def setup(self):
@@ -49,22 +51,21 @@ class Trainer():
         self.model.train()
         for epoch in range(self.start_epoch,self.epochs):
             epoch_all_loss=0
-            count=0
             with tqdm(self.train_dataloader, disable=False) as bar:
                 for item in bar:
                     batch_x,batch_y=item
                     batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                     batch_output=self.model(batch_x)
 
-                    loss=self.compute_loss(count,batch_output,batch_y)
+                    loss=self.compute_loss(batch_output,batch_y)
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
-                    count+=1
+                    self.loss_count+=1
                     epoch_all_loss+=loss.item()
                     bar.set_postfix({'epoch':epoch,
-                                     'loss':epoch_all_loss/count})
-            epoch_avg_loss=epoch_all_loss/count
+                                     'loss':epoch_all_loss/self.loss_count})
+            epoch_avg_loss=epoch_all_loss/self.loss_count
             tqdm.write(f"本轮epoch平均损失为: {epoch_avg_loss}")
             self.writer.add_scalar('epoch_loss',epoch_avg_loss,epoch)
             self.losses.append(epoch_avg_loss)
@@ -76,30 +77,29 @@ class Trainer():
         self.model.eval()
         with torch.no_grad():
             epoch_all_acc=0
-            count=0
             bar=tqdm(self.val_dataloader, disable=False)
             for item in bar:
                 batch_x,batch_y=item
                 batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                 batch_output=self.model(batch_x)
 
-                accuracy=self.compute_accuracy(count,batch_output,batch_y)
-                count+=1
+                accuracy=self.compute_accuracy(batch_output,batch_y)
+                self.accuracy_count+=1
                 epoch_all_acc+=accuracy
-                bar.set_postfix({'batch_accuracy':f'{epoch_all_acc/count:.2%}'})
-            epoch_avg_acc=epoch_all_acc/count
-            self.writer.add_scalar('acg_accuracy',epoch_avg_acc,epoch)
+                bar.set_postfix({'batch_accuracy':f'{epoch_all_acc/self.accuracy_count:.2%}'})
+            epoch_avg_acc=epoch_all_acc/self.accuracy_count
+            self.writer.add_scalar('epoch_accuracy',epoch_avg_acc,epoch)
 
-    def compute_loss(self,count,batch_output,batch_y):
+    def compute_loss(self,batch_output,batch_y):
         loss=torch.nn.CrossEntropyLoss(reduction='mean')(batch_output,batch_y)
-        self.writer.add_scalar('batch_loss(each batch size)',loss,count)
+        self.writer.add_scalar('batch_loss(each batch size)',loss,self.loss_count)
         return loss
 
-    def compute_accuracy(self,count,batch_output,batch_y):
+    def compute_accuracy(self,batch_output,batch_y):
         pred=torch.argmax(batch_output,dim=1)
         targ=torch.argmax(batch_y,dim=1)
         accuracy=(pred==targ).float().mean()
-        self.writer.add_scalar('accuracy(each batch size)',accuracy,count)
+        self.writer.add_scalar('accuracy(each batch size)',accuracy,self.accuracy_count)
         return accuracy
 
     def save_best_model(self,epoch):
