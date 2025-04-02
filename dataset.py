@@ -45,7 +45,7 @@ class Mini_ImageNet(Dataset):
     def __getitem__(self,index):
         img_path,id=self.datasets[index]
         img=cv.imread(img_path)
-        img=cv.resize(img,(416,416))
+        img=cv.resize(img,(224,224))
         x=ToTensor()(img)
 
         y=torch.zeros(100)

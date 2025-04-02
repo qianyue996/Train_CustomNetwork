@@ -4,7 +4,6 @@ import torch
 import time
 from torch.utils.tensorboard import SummaryWriter
 import os
-import sys
 from tqdm import tqdm
 
 from dataset import Mini_ImageNet
@@ -14,7 +13,7 @@ class Trainer():
     def __init__(self):
         super().__init__()
         self.device='cuda' if torch.cuda.is_available() else 'cpu'
-        self.lr=0.001
+        self.lr=3e-5
         self.batch_size=2
         self.start_epoch=0
         self.epochs=300
@@ -46,25 +45,26 @@ class Trainer():
         # tensorboard
         self.writer=SummaryWriter(f'runs/{time.strftime("%Y-%m-%d-%H-%M-%S",time.localtime())}')
 
-        self.model.train()
-
     def train(self):
+        self.model.train()
         for epoch in range(self.start_epoch,self.epochs):
             epoch_all_loss=0
+            count=0
             with tqdm(self.train_dataloader, disable=False) as bar:
-                for batch,item in enumerate(bar):
+                for item in bar:
                     batch_x,batch_y=item
                     batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                     batch_output=self.model(batch_x)
-                    loss=self.compute_loss(batch_output,batch_y)
-                    loss=loss/self.batch_size
+
+                    loss=self.compute_loss(count,batch_output,batch_y)
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
+                    count+=1
                     epoch_all_loss+=loss.item()
                     bar.set_postfix({'epoch':epoch,
-                                     'loss:':epoch_all_loss/len(self.train_dataloader)})
-            epoch_avg_loss=epoch_all_loss/len(self.train_dataloader)
+                                     'loss':epoch_all_loss/count})
+            epoch_avg_loss=epoch_all_loss/count
             tqdm.write(f"本轮epoch平均损失为: {epoch_avg_loss}")
             self.writer.add_scalar('epoch_loss',epoch_avg_loss,epoch)
             self.losses.append(epoch_avg_loss)
@@ -75,26 +75,32 @@ class Trainer():
     def val(self,epoch):
         self.model.eval()
         with torch.no_grad():
-            epoch_all_acc_count=0
+            epoch_all_acc=0
+            count=0
             bar=tqdm(self.val_dataloader, disable=False)
             for item in bar:
                 batch_x,batch_y=item
                 batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                 batch_output=self.model(batch_x)
-                acc_count=self.compute_accuracy(batch_output,batch_y)
-                epoch_all_acc_count+=acc_count
-                bar.set_postfix({'batch_accuracy':f'{epoch_all_acc_count/len(self.val_dataloader):.2%}'})
-            epoch_avg_acc=epoch_all_acc_count/len(self.val_dataloader)
+
+                accuracy=self.compute_accuracy(count,batch_output,batch_y)
+                count+=1
+                epoch_all_acc+=accuracy
+                bar.set_postfix({'batch_accuracy':f'{epoch_all_acc/count:.2%}'})
+            epoch_avg_acc=epoch_all_acc/count
             self.writer.add_scalar('acg_accuracy',epoch_avg_acc,epoch)
 
-    def compute_loss(self,batch_output,batch_y):
-        loss=torch.nn.CrossEntropyLoss(reduction='sum')(batch_output,batch_y)
+    def compute_loss(self,count,batch_output,batch_y):
+        loss=torch.nn.CrossEntropyLoss(reduction='mean')(batch_output,batch_y)
+        self.writer.add_scalar('batch_loss(each batch size)',loss,count)
         return loss
 
-    def compute_accuracy(self,batch_output,batch_y):
+    def compute_accuracy(self,count,batch_output,batch_y):
         pred=torch.argmax(batch_output,dim=1)
         targ=torch.argmax(batch_y,dim=1)
-        return (pred==targ).float()
+        accuracy=(pred==targ).float().mean()
+        self.writer.add_scalar('accuracy(each batch size)',accuracy,count)
+        return accuracy
 
     def save_best_model(self,epoch):
         if len(self.losses)==1 or self.losses[-1]<self.losses[-2]: # 保存更优的model
@@ -109,5 +115,4 @@ class Trainer():
 if __name__ == '__main__':
     trainer=Trainer()
     trainer.setup()
-    # trainer.train()
-    trainer.val(0)
+    trainer.train()
