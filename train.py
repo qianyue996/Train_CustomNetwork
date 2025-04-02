@@ -19,8 +19,6 @@ class Trainer():
         self.start_epoch=0
         self.epochs=300
 
-        self.loss_count=0
-        self.acc_count=0
         self.losses=[]
         self.checkpoint=None
 
@@ -59,14 +57,14 @@ class Trainer():
                     batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                     batch_output=self.model(batch_x)
                     loss=self.compute_loss(batch_output,batch_y)
+                    loss=loss/self.batch_size
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
                     epoch_all_loss+=loss.item()
-                    self.loss_count+=1
                     bar.set_postfix({'epoch':epoch,
-                                     'loss:':loss.item()})
-            epoch_avg_loss=epoch_all_loss/self.loss_count
+                                     'loss:':epoch_all_loss/len(self.train_dataloader)})
+            epoch_avg_loss=epoch_all_loss/len(self.train_dataloader)
             tqdm.write(f"本轮epoch平均损失为: {epoch_avg_loss}")
             self.writer.add_scalar('epoch_loss',epoch_avg_loss,epoch)
             self.losses.append(epoch_avg_loss)
@@ -75,28 +73,28 @@ class Trainer():
             self.val(epoch)
 
     def val(self,epoch):
+        self.model.eval()
         with torch.no_grad():
-            epoch_all_accuracy=0
+            epoch_all_acc_count=0
             bar=tqdm(self.val_dataloader, disable=False)
             for item in bar:
                 batch_x,batch_y=item
                 batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                 batch_output=self.model(batch_x)
-                acc=self.compute_accuracy(batch_output,batch_y)
-                epoch_all_accuracy+=acc
-                self.acc_count+=1
-                bar.set_postfix({'batch_accuracy':f'{acc.item():.2%}'})
-            epoch_avg_acc=epoch_all_accuracy/self.acc_count
+                acc_count=self.compute_accuracy(batch_output,batch_y)
+                epoch_all_acc_count+=acc_count
+                bar.set_postfix({'batch_accuracy':f'{epoch_all_acc_count/len(self.val_dataloader):.2%}'})
+            epoch_avg_acc=epoch_all_acc_count/len(self.val_dataloader)
             self.writer.add_scalar('acg_accuracy',epoch_avg_acc,epoch)
 
     def compute_loss(self,batch_output,batch_y):
-        loss=torch.nn.CrossEntropyLoss(reduction='mean')(batch_output,batch_y)
+        loss=torch.nn.CrossEntropyLoss(reduction='sum')(batch_output,batch_y)
         return loss
 
     def compute_accuracy(self,batch_output,batch_y):
         pred=torch.argmax(batch_output,dim=1)
         targ=torch.argmax(batch_y,dim=1)
-        return (pred==targ).float().mean()
+        return (pred==targ).float()
 
     def save_best_model(self,epoch):
         if len(self.losses)==1 or self.losses[-1]<self.losses[-2]: # 保存更优的model
