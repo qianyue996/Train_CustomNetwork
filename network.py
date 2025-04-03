@@ -13,14 +13,6 @@ class Conv_BN_LeakyReLU(nn.Module):
     def forward(self, x):
         return self.convs(x)
 
-class GlobalAvgPool2d(nn.Module):
-    def __init__(self):
-        super(GlobalAvgPool2d, self).__init__()
-
-    def forward(self, x):
-        return torch.mean(x, dim=[2, 3])
-
-
 class Darknet19(nn.Module):
     def __init__(self):
         super(Darknet19, self).__init__()
@@ -32,7 +24,7 @@ class Darknet19(nn.Module):
         self.conv_layer5 = nn.Sequential(Conv_BN_LeakyReLU(256,512),Conv_BN_LeakyReLU(512,256),Conv_BN_LeakyReLU(256,512),Conv_BN_LeakyReLU(512,256),Conv_BN_LeakyReLU(256,512))
         self.conv_layer6 = nn.Sequential(Conv_BN_LeakyReLU(512,1024),Conv_BN_LeakyReLU(1024,512),Conv_BN_LeakyReLU(512,1024),Conv_BN_LeakyReLU(1024,512),Conv_BN_LeakyReLU(512,1024))
         
-        self.head = nn.Sequential(Conv_BN_LeakyReLU(1024,100,1),GlobalAvgPool2d())
+        self.head = nn.Sequential(Conv_BN_LeakyReLU(1024,100,1),nn.AdaptiveAvgPool2d(1))
 
     def forward(self, x):
         x = self.conv_layer1(x)
@@ -46,8 +38,10 @@ class Darknet19(nn.Module):
         feature = self.conv_layer5(x)
         x = self.maxpool(feature)
         x = self.conv_layer6(x)
-        head_output = self.head(x)
-        return head_output
+
+        x = self.head(x).flatten(1)
+        x = nn.Dropout(0.5)(x)
+        return x
     
 if __name__=='__main__':
     input=torch.randn((1,3,224,224))

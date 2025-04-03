@@ -13,19 +13,19 @@ class Trainer():
     def __init__(self):
         super().__init__()
         self.device='cuda' if torch.cuda.is_available() else 'cpu'
-        self.lr=5e-4
+        self.lr=5e-6
         self.batch_size=2
         self.start_epoch=0
         self.epochs=300
 
-        self.losses=[]
-        self.loss_count=0
-        self.accuracy_count=0
+        self.losses=[]  # 每个epoch的loss计数
+        self.loss_count=0  # 每轮batch计数
+        self.accuracy_count=0  # 每轮batch计数
         self.checkpoint=None
 
     def setup(self):
         # 加载数据集
-        train_ds=Mini_ImageNet()
+        train_ds=Mini_ImageNet(mode='train')
         val_ds=Mini_ImageNet(mode='val')
         # ---
         self.train_dataloader=DataLoader(train_ds,batch_size=self.batch_size,shuffle=True)
@@ -57,7 +57,7 @@ class Trainer():
                     batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                     batch_output=self.model(batch_x)
 
-                    loss=self.compute_loss(batch_output,batch_y)
+                    loss=self.compute_loss(batch_output,batch_y)  # loss是单个样本的值 / 平均值
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
@@ -83,16 +83,18 @@ class Trainer():
                 batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                 batch_output=self.model(batch_x)
 
-                accuracy=self.compute_accuracy(batch_output,batch_y)
+                accuracy=self.compute_accuracy(batch_output,batch_y)  # 单个样本的准确率 / 单批次平均准确率
                 self.accuracy_count+=1
                 epoch_all_acc+=accuracy
-                bar.set_postfix({'batch_accuracy':f'{epoch_all_acc/self.accuracy_count:.2%}'})
+                bar.set_postfix({'epoch':epoch,
+                                 'batch_accuracy':f'{epoch_all_acc/self.accuracy_count:.2%}'})
             epoch_avg_acc=epoch_all_acc/self.accuracy_count
+            tqdm.write(f"本轮epoch平均正确率为: {epoch_all_acc/self.accuracy_count:.2%}")
             self.writer.add_scalar('epoch_accuracy',epoch_avg_acc,epoch)
 
     def compute_loss(self,batch_output,batch_y):
         loss=torch.nn.CrossEntropyLoss(reduction='mean')(batch_output,batch_y)
-        self.writer.add_scalar('batch_loss(each batch size)',loss,self.loss_count)
+        self.writer.add_scalar('batch_loss(each batch size)',loss.item(),self.loss_count)
         return loss
 
     def compute_accuracy(self,batch_output,batch_y):
@@ -111,6 +113,8 @@ class Trainer():
             }
             torch.save(checkpoint,'.yolov2.weight')
             os.replace('.yolov2.weight','yolov2.weight')
+        if epoch==160:
+            torch.save(self.model.state_dict(),'last_one_epoch_yolov2.weight')
 
 if __name__ == '__main__':
     trainer=Trainer()
